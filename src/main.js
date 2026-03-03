@@ -39,13 +39,19 @@ function analyzeSalesData(data, options) {
   ) {
     throw new Error("Некорректные входные данные");
   }
+  if (
+    data.sellers.length === 0 ||
+    data.products.length === 0 ||
+    data.purchase_records.length === 0
+  ) {
+    throw new Error("Некорректные входные данные");
+  }
 
   const { calculateRevenue, calculateBonus } = options;
   if (!calculateRevenue || !calculateBonus) {
     throw new Error("Не переданы функции для расчётов");
   }
 
-  // Промежуточная статистика по продавцам
   const sellerStats = data.sellers.map((seller) => ({
     seller_id: seller.id,
     name: `${seller.first_name} ${seller.last_name}`,
@@ -55,13 +61,11 @@ function analyzeSalesData(data, options) {
     products_sold: {},
   }));
 
-  // Индексы для быстрого доступа
   const sellerIndex = Object.fromEntries(
     sellerStats.map((s) => [s.seller_id, s]),
   );
   const productIndex = Object.fromEntries(data.products.map((p) => [p.sku, p]));
 
-  // Основная бизнес-логика
   data.purchase_records.forEach((record) => {
     const seller = sellerIndex[record.seller_id];
     seller.sales_count += 1;
@@ -82,18 +86,26 @@ function analyzeSalesData(data, options) {
     });
   });
 
-  // Сортировка продавцов по прибыли
   sellerStats.sort((a, b) => b.profit - a.profit);
 
-  // Назначение бонусов и топ-10 товаров
-  sellerStats.forEach((seller, index) => {
-    seller.bonus = calculateBonus(index, sellerStats.length, seller);
+  return sellerStats.map((seller, index, arr) => {
+    const bonus = Number(calculateBonus(index, arr.length, seller).toFixed(2));
+    const profit = Number(seller.profit.toFixed(2));
+    const revenue = Number(seller.revenue.toFixed(2));
 
-    seller.top_products = Object.entries(seller.products_sold)
+    const top_products = Object.entries(seller.products_sold)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([sku, qty]) => ({ sku, qty }));
-  });
+      .map(([sku, quantity]) => ({ sku, quantity }));
 
-  return sellerStats;
+    return {
+      seller_id: seller.seller_id,
+      name: seller.name,
+      revenue,
+      profit,
+      sales_count: seller.sales_count,
+      bonus,
+      top_products,
+    };
+  });
 }
